@@ -2,7 +2,7 @@ import random, os, time, json
 from colorama import Fore, Back, Style
 
 #constants
-BOARD_SIZE = [12, 12]
+BOARD_SIZE = [32, 22]
 #"example": ["top", "right", "bottom", "left"]
 CHAR_DATA = {    
     "║" : [1, 0, 1, 0],
@@ -115,8 +115,6 @@ def Propagate(x, y, board, debug=False):
                 possibilites = len(adjacentTile.possibilities)
                 adjacentTile.possibilities = [state for state in adjacentTile.possibilities if state in original.possibleConnections[i]]
                 if debug: print(original.possibleConnections[i])
-                if len(adjacentTile.possibilities) == 0:
-                    print(adjacentTile.x, adjacentTile.y)
                 if possibilites > len(adjacentTile.possibilities):
                     stack.append(adjacentTile)
                     GetPossible(adjacentTile)
@@ -152,7 +150,10 @@ class Tile:
             return Fore.GREEN + self.collapsedState + Style.RESET_ALL
 
 
-
+if input("Use custom size (y/n): ").lower().startswith("y"):
+    print(Fore.RED + "WARNING:" + Style.RESET_ALL + " Bigger values will make the generation take longer")
+    BOARD_SIZE[0] = int(input("X size (int): "))
+    BOARD_SIZE[1] = int(input("Y size (int): "))
 board = CreateBoard(BOARD_SIZE[0], BOARD_SIZE[1])
 GetPossible(GetTile(0,0,board))
 InitiallyPossible = GetTile(0,0,board).possibleConnections
@@ -164,10 +165,7 @@ random.seed(seed)
 
 
 timeDelay = 0.1
-if input("Use custom size (y/n): ").lower().startswith("y"):
-    print(Fore.RED + "WARNING:" + Style.RESET_ALL + " Bigger values will make the generation take longer")
-    BOARD_SIZE[0] = int(input("X size (int): "))
-    BOARD_SIZE[1] = int(input("Y size (int): "))
+
 if input("Cut off edges (y/n): ").lower().startswith("y"):
     #top/bottom row
     for x in range(BOARD_SIZE[0]):
