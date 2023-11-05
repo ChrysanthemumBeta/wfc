@@ -24,7 +24,7 @@ DIR_COMPLEMENTS = {
     2 : 0,
     3 : 1
     }
-DIRS = [(0, -1), (-1, 0), (0, 1), (1, 0)]
+DIRS = [(0, -1), (1, 0), (0, 1), (-1, 0)]
         
 #functions
 def AllCollapsed(board):
@@ -112,6 +112,7 @@ class Tile:
         self.possibilities = [self.collapsedState]
     def __str__(self):
         if self.collapsedState == None:
+            return " "
             return str(hex(len(self.possibilities)))[2:]
         else:
             return self.collapsedState
@@ -142,7 +143,9 @@ while not AllCollapsed(board):
         lowest.Collapse()
         Propagate(lowest.x, lowest.y, board)
         DrawBoard(board)
-        input()
+        time.sleep(0.1)
+        os.system("cls")
+
 
     else:
         break
