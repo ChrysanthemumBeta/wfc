@@ -1,7 +1,8 @@
-import random, os, time, colorama
+import random, os, time, json
+from colorama import Fore, Back, Style
 
 #constants
-BOARD_SIZE = (10, 10)
+BOARD_SIZE = (32, 22)
 #"example": ["top", "right", "bottom", "left"]
 CHAR_DATA = {    
     "║" : [1, 0, 1, 0],
@@ -26,7 +27,35 @@ DIR_COMPLEMENTS = {
     }
 DIRS = [(0, -1), (1, 0), (0, 1), (-1, 0)]
         
+COLOUR_THRESHOLD = {
+    0.7 : Fore.RED,
+    0.5 : Fore.LIGHTRED_EX,
+    0.3 : Fore.YELLOW,
+    0 : Fore.GREEN
+    }
+
+WEIGHTS = {
+    "║" : 0.8,
+    "╔" : 0.1,
+    "╗" : 0.1,
+    "╚" : 0.1,
+    "╝" : 0.1,
+    "╬" : 0.1,
+    "╠" : 0.1,
+    "╣" : 0.1,
+    "═" : 0.8,
+    "╦" : 0.1,
+    "╩" : 0.1,
+    " " : 0.8
+}
+
 #functions
+def GetClosestColour(possibilities):
+    perc = (possibilities/ len(CHARS))
+    for thresh in COLOUR_THRESHOLD:
+        if perc >= thresh:
+            return COLOUR_THRESHOLD[thresh]
+
 def AllCollapsed(board):
     for tile in board:
         if tile.collapsedState == None:
@@ -37,7 +66,7 @@ def GetLowestEntropy(board):
     lowest = 100
     lowestTiles = []
     for tile in board:
-        if len(tile.possibilities) < lowest and len(tile.possibilities) > 1:
+        if len(tile.possibilities) < lowest and len(tile.possibilities) >= 1 and tile.collapsedState == None:
             lowest = len(tile.possibilities)
     for tile in board:
         if len(tile.possibilities) == lowest:
@@ -51,16 +80,6 @@ def CreateBoard(size_X, size_Y):
             tiles.append(Tile(x, y))
     return tiles
 
-def GetTile(x, y, board):
-    for tile in board:
-        if tile.x == x and tile.y == y:
-            return tile
-    return False
-
-def DrawBoard(board):
-    for y in range(BOARD_SIZE[1]):
-        print("".join(str(GetTile(x, y, board)) for x in range(BOARD_SIZE[1])))
-
 def GetPossible(tile):
     tile.possibleConnections = {0:[],1:[],2:[],3:[]}
     for char in tile.possibilities:
@@ -70,7 +89,15 @@ def GetPossible(tile):
                 if data[DIR_COMPLEMENTS[i]] == dir:
                     tile.possibleConnections[i].append(possibleTile)
 
+def GetTile(x, y, board):
+    for tile in board:
+        if tile.x == x and tile.y == y:
+            return tile
+    return False
 
+def DrawBoard(board):
+    for y in range(BOARD_SIZE[1]):
+        print("".join(str(GetTile(x, y, board)) for x in range(BOARD_SIZE[0])))
 
 def Propagate(x, y, board, debug=False):
     stack = [GetTile(x, y, board)]
@@ -88,6 +115,8 @@ def Propagate(x, y, board, debug=False):
                 possibilites = len(adjacentTile.possibilities)
                 adjacentTile.possibilities = [state for state in adjacentTile.possibilities if state in original.possibleConnections[i]]
                 if debug: print(original.possibleConnections[i])
+                if len(adjacentTile.possibilities) == 0:
+                    print(adjacentTile.x, adjacentTile.y)
                 if possibilites > len(adjacentTile.possibilities):
                     stack.append(adjacentTile)
                     GetPossible(adjacentTile)
@@ -95,11 +124,9 @@ def Propagate(x, y, board, debug=False):
             DrawBoard(board)
             print(len(stack))
             input()
-       
-
-
-
-
+      
+def GetWeights(possibilities):
+    return [WEIGHTS[state] for state in possibilities]
 
 #classes
 class Tile:
@@ -108,14 +135,18 @@ class Tile:
         self.possibilities = CHARS
         self.collapsedState = None
     def Collapse(self):
-        self.collapsedState = random.choice(self.possibilities)
+        self.collapsedState = random.choices(self.possibilities, GetWeights(self.possibilities))[0]
         self.possibilities = [self.collapsedState]
+    def CollapseTo(self, state):
+        if state in self.possibilities:
+            self.collapsedState = state
+            self.possibilities = [self.collapsedState]
     def __str__(self):
         if self.collapsedState == None:
-            return " "
-            return str(hex(len(self.possibilities)))[2:]
+            possibilities = len(self.possibilities)
+            return GetClosestColour(possibilities) + str(hex(possibilities))[2:]
         else:
-            return self.collapsedState
+            return Fore.GREEN + self.collapsedState + Style.RESET_ALL
 
 
 
@@ -125,9 +156,41 @@ InitiallyPossible = GetTile(0,0,board).possibleConnections
 for tile in board:
         tile.possibleConnections = InitiallyPossible
 
-random.seed(2)
+seed = random.randint(-10000, 10000)
+random.seed(seed)
 
-startX, startY = random.randint(0, BOARD_SIZE[0] - 1), random.randint(0, BOARD_SIZE[1] - 1)
+
+timeDelay = 0.1
+if input("Cut off edges (y/n): ").lower().startswith("y"):
+    #top/bottom row
+    for x in range(BOARD_SIZE[0]):
+        topEdgeTile = GetTile(x, 0, board)
+        topEdgeTile.CollapseTo(" ")
+        GetPossible(topEdgeTile)
+        Propagate(x, 0, board)
+        bottomEdgeTile = GetTile(x, BOARD_SIZE[1]-1, board)
+        bottomEdgeTile.CollapseTo(" ")
+        GetPossible(bottomEdgeTile)
+        Propagate(x, BOARD_SIZE[1]-1, board)
+    #left/right column
+    for y in range(BOARD_SIZE[1]):
+        leftEdgeTile = GetTile(0, y, board)
+        leftEdgeTile.CollapseTo(" ")
+        GetPossible(leftEdgeTile)
+        Propagate(0, y, board)
+        RightEdgeTile = GetTile(BOARD_SIZE[0]-1, y, board)
+        RightEdgeTile.CollapseTo(" ")
+        GetPossible(RightEdgeTile)
+        Propagate(BOARD_SIZE[0]-1, y, board)
+showProgress = input("Show progress (y/n): ").lower().startswith("y")
+if showProgress: timeDelay = float(input("Enter time delay between updates (float): "))
+useWeights = input("Use weights (y/n): ").lower().startswith("y")
+    
+
+
+startX, startY = random.randint(1, BOARD_SIZE[0] - 2), random.randint(1, BOARD_SIZE[1] - 2)
+
+startTime = time.time()
 
 startTile = GetTile(startX, startY, board)
 startTile.Collapse()
@@ -135,21 +198,21 @@ GetPossible(startTile)
 
 Propagate(startX, startY, board)
 
-print(GetTile(0,1,board).possibleConnections)
-
 while not AllCollapsed(board):
     lowest = random.choice(GetLowestEntropy(board))
     if lowest != None:
         lowest.Collapse()
         Propagate(lowest.x, lowest.y, board)
-        DrawBoard(board)
-        time.sleep(0.1)
-        os.system("cls")
-
-
+        if showProgress:
+            DrawBoard(board)
+            os.system("cls")
+            time.sleep(timeDelay)
     else:
         break
 
 
 DrawBoard(board)
+
+print("seed: {}".format(seed))
+print("Board of size {}x{} generated and drawn in {:.2f} seconds".format(BOARD_SIZE[0], BOARD_SIZE[1], (time.time()-startTime)))
 
