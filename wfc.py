@@ -58,15 +58,15 @@ def GetClosestColour(possibilities):
 
 def AllCollapsed(board):
     for tile in board:
-        if tile.collapsedState == None:
-            return False
+        if not tile.collapsed:
+           return False
     return True
 
 def GetLowestEntropy(board):
     lowest = 100
     lowestTiles = []
     for tile in board:
-        if len(tile.possibilities) < lowest and len(tile.possibilities) >= 1 and tile.collapsedState == None:
+        if len(tile.possibilities) < lowest and len(tile.possibilities) >= 1 and not tile.collapsed:
             lowest = len(tile.possibilities)
     for tile in board:
         if len(tile.possibilities) == lowest:
@@ -134,13 +134,16 @@ class Tile:
         self.x, self.y = x, y
         self.possibilities = CHARS
         self.collapsedState = None
+        self.collapsed = False
     def Collapse(self):
         self.collapsedState = random.choices(self.possibilities, GetWeights(self.possibilities))[0]
         self.possibilities = [self.collapsedState]
+        self.collapsed = True
     def CollapseTo(self, state):
         if state in self.possibilities:
             self.collapsedState = state
             self.possibilities = [self.collapsedState]
+            self.collapsed = True
     def __str__(self):
         if self.collapsedState == None:
             possibilities = len(self.possibilities)
@@ -202,8 +205,11 @@ GetPossible(startTile)
 
 Propagate(startX, startY, board)
 
+prevLowest = []
+
 while not AllCollapsed(board):
-    lowest = random.choice(GetLowestEntropy(board))
+    lowest = random.choice([tile for tile in GetLowestEntropy(board) if not tile.collapsed])
+    prevLowest.append(lowest)
     if lowest != None:
         lowest.Collapse()
         Propagate(lowest.x, lowest.y, board)
