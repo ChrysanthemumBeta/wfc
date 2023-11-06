@@ -1,4 +1,4 @@
-import random, os, time, json, cProfile
+import random, os, time, json, cProfile, pygame
 from colorama import Fore, Back, Style
 
 #constants
@@ -7,6 +7,9 @@ USE_OPTIMISED_GET_TILE = True
 #OLD - 30x30 - 15.39
 #NEW - 30x30 - 4.42
 USE_OPTIMISED_GET_LOWEST_ENTROPY = True
+
+WINDOW_WIDTH = 550
+WINDOW_HEIGHT = 550
 
 BOARD_SIZE = [32, 22]
 #"example": ["top", "right", "bottom", "left"]
@@ -40,6 +43,13 @@ COLOUR_THRESHOLD = {
     0 : Fore.GREEN
     }
 
+COLOURS = {
+    Fore.RED: (255, 0, 0),
+    Fore.LIGHTRED_EX: (227, 72, 86),
+    Fore.YELLOW: (193, 156, 0),
+    Fore.GREEN: (0, 255, 0)
+    }
+
 WEIGHTS = {
     "║" : 0.8,
     "╔" : 0.1,
@@ -54,6 +64,11 @@ WEIGHTS = {
     "╩" : 0.1,
     " " : 0.8
 }
+
+CHAR_W = 0
+CHAR_H = 0
+pygame.font.init()
+FONT = pygame.font.SysFont("consolas", 20)
 
 EntropyDict = {}
 
@@ -128,8 +143,22 @@ def GetTile(x, y, board, debug=False):
     return False
 
 def DrawBoard(board):
-    for y in range(BOARD_SIZE[1]):
-        print("".join(str(GetTile(x, y, board)) for x in range(BOARD_SIZE[0])))
+    if not pygameVis:
+        for y in range(BOARD_SIZE[1]):
+            print("".join(str(GetTile(x, y, board)) for x in range(BOARD_SIZE[0])))
+    else:
+        dis.fill(0)
+        for tile in board:
+            if type(tile) != int:
+                s = FONT.render(str(tile), False, COLOURS[GetClosestColour(len(tile.possibilities))])
+                if s.get_height() == 23:
+                    dis.blit(s, ((tile.x*CHAR_W) + CHAR_W/2, (tile.y*2*CHAR_W) - 3))
+                else:
+                    dis.blit(s, ((tile.x*CHAR_W) + CHAR_W/2, (tile.y*2*CHAR_W)))
+        pygame.display.flip()
+        
+        pass
+
 
 def Propagate(x, y, board, debug=False):
     stack = [GetTile(x, y, board)]
@@ -181,15 +210,45 @@ class Tile:
     def __str__(self):
         if self.collapsedState == None:
             possibilities = len(self.possibilities)
+            if pygameVis:
+                return str(hex(possibilities))[2:]
             return GetClosestColour(possibilities) + str(hex(possibilities))[2:]
         else:
+            if pygameVis:
+                return self.collapsedState
             return Fore.GREEN + self.collapsedState + Style.RESET_ALL
+
+
+
+pygameVis = input("Use pygame visualisation (y/n): ").lower().startswith("y")
+
+dis = None
+
+
+if pygameVis:
+    import pygame
+    pygame.init()
+    pygame.font.init()
+    dis = pygame.display.set_mode((400,400))
+    for char in CHARS:
+        print(char, str(FONT.render(char, True, (255, 255, 255)).get_height()))
+    s = FONT.render(" ", True, (255, 255, 255))
+    CHAR_W = s.get_width()
+    CHAR_H = 20
+    pygame.display.flip()
+
 
 
 if input("Use custom size (y/n): ").lower().startswith("y"):
     print(Fore.RED + "WARNING:" + Style.RESET_ALL + " Bigger values will make the generation take longer")
     BOARD_SIZE[0] = int(input("X size (int): "))
     BOARD_SIZE[1] = int(input("Y size (int): "))
+    if pygameVis:
+        if BOARD_SIZE[0] * CHAR_W > WINDOW_WIDTH:
+            BOARD_SIZE[0] = WINDOW_WIDTH // CHAR_W
+        if BOARD_SIZE[1] * CHAR_H > WINDOW_HEIGHT:
+            BOARD_SIZE[1] = WINDOW_HEIGHT // CHAR_H
+
 board = CreateBoard(BOARD_SIZE[0], BOARD_SIZE[1])
 
 #Setup for lowest Entropy
@@ -263,8 +322,8 @@ def wfc():
             lowest.Collapse()
             Propagate(lowest.x, lowest.y, board)
             if showProgress:
-                DrawBoard(board)
                 os.system("cls")
+                DrawBoard(board)
                 time.sleep(timeDelay)
         else:
             break
@@ -277,4 +336,12 @@ DrawBoard(board)
 print("seed: {}".format(seed))
 print("Board of size {}x{} generated and drawn in {:.2f} seconds".format(BOARD_SIZE[0], BOARD_SIZE[1], (time.time()-startTime)))
 cp.print_stats(sort='time')
+
+if pygameVis:
+    running = True
+    while running:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                running = False
 
