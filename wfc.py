@@ -1,7 +1,13 @@
-import random, os, time, json
+import random, os, time, json, cProfile
 from colorama import Fore, Back, Style
 
 #constants
+USE_OPTIMISED_GET_TILE = True
+#Optmised method 71.28% faster than non optimised
+#OLD - 30x30 - 15.39
+#NEW - 30x30 - 4.42
+USE_OPTIMISED_GET_LOWEST_ENTROPY = True
+
 BOARD_SIZE = [32, 22]
 #"example": ["top", "right", "bottom", "left"]
 CHAR_DATA = {    
@@ -49,6 +55,8 @@ WEIGHTS = {
     " " : 0.8
 }
 
+EntropyDict = {}
+
 #functions
 def GetClosestColour(possibilities):
     perc = (possibilities/ len(CHARS))
@@ -58,9 +66,26 @@ def GetClosestColour(possibilities):
 
 def AllCollapsed(board):
     for tile in board:
-        if not tile.collapsed:
+        if type(tile) != int and not tile.collapsed:
            return False
     return True
+
+def EvenMoreOptimisedGetLowestEntropy(board):
+    lowestTiles = [tile for tile in EntropyDict[board[-1]] if not tile.collapsed]
+    while lowestTiles == []:
+        board[-1] += 1
+        lowestTiles = [tile for tile in EntropyDict[board[-1]] if not tile.collapsed]
+    return lowestTiles
+
+def OptimisedGetLowestEntropy(board):
+    lowest = 100
+    lowestTiles = []
+    for tile in board:
+       if type(tile) != int:
+            if len(tile.possibilities) <= lowest and not tile.collapsed:
+                lowest = len(tile.possibilities)
+                lowestTiles.append(tile)
+    return [tile for tile in lowestTiles if len(tile.possibilities) == lowest]
 
 def GetLowestEntropy(board):
     lowest = 100
@@ -89,10 +114,17 @@ def GetPossible(tile):
                 if data[DIR_COMPLEMENTS[i]] == dir:
                     tile.possibleConnections[i].append(possibleTile)
 
-def GetTile(x, y, board):
-    for tile in board:
-        if tile.x == x and tile.y == y:
-            return tile
+def GetTile(x, y, board, debug=False):
+    if USE_OPTIMISED_GET_TILE:
+        if x >= 0 and x < BOARD_SIZE[0] and y >= 0 and y < BOARD_SIZE[1]:
+            index = (x*BOARD_SIZE[1]) + y
+            return board[index]
+        else:
+            if debug: print(x, y)
+    else:
+        for i, tile in enumerate(board):
+            if tile.x == x and tile.y == y:
+                return tile
     return False
 
 def DrawBoard(board):
@@ -115,9 +147,13 @@ def Propagate(x, y, board, debug=False):
                 possibilites = len(adjacentTile.possibilities)
                 adjacentTile.possibilities = [state for state in adjacentTile.possibilities if state in original.possibleConnections[i]]
                 if debug: print(original.possibleConnections[i])
-                if possibilites > len(adjacentTile.possibilities):
+                newPossibilites = len(adjacentTile.possibilities)
+                if possibilites > newPossibilites:
                     stack.append(adjacentTile)
-                    GetPossible(adjacentTile)
+                    EntropyDict[possibilites].remove(adjacentTile)
+                    EntropyDict[newPossibilites].append(adjacentTile)
+                    if newPossibilites < board[-1]:
+                        board[-1] = newPossibilites
         if debug:
             DrawBoard(board)
             print(len(stack))
@@ -155,10 +191,22 @@ if input("Use custom size (y/n): ").lower().startswith("y"):
     BOARD_SIZE[0] = int(input("X size (int): "))
     BOARD_SIZE[1] = int(input("Y size (int): "))
 board = CreateBoard(BOARD_SIZE[0], BOARD_SIZE[1])
+
+#Setup for lowest Entropy
+board.append(100)
+
 GetPossible(GetTile(0,0,board))
 InitiallyPossible = GetTile(0,0,board).possibleConnections
+
+for i in range(1, len(GetTile(0,0,board).possibilities) + 1):
+    EntropyDict[i] = []
+
+
+
 for tile in board:
+    if tile != 100:
         tile.possibleConnections = InitiallyPossible
+        EntropyDict[len(tile.possibilities)].append(tile)
 
 seed = random.randint(-10000, 10000)
 random.seed(seed)
@@ -190,37 +238,43 @@ if input("Cut off edges (y/n): ").lower().startswith("y"):
 showProgress = input("Show progress (y/n): ").lower().startswith("y")
 if showProgress: timeDelay = float(input("Enter time delay between updates (float): "))
 useWeights = input("Use weights (y/n): ").lower().startswith("y")
-    
 
+startTime = 0
 
-startX, startY = random.randint(1, BOARD_SIZE[0] - 2), random.randint(1, BOARD_SIZE[1] - 2)
+def wfc():
+    global startTime
+    startX, startY = random.randint(1, BOARD_SIZE[0] - 2), random.randint(1, BOARD_SIZE[1] - 2)
 
-startTime = time.time()
+    startTime = time.time()
 
-startTile = GetTile(startX, startY, board)
-startTile.Collapse()
-GetPossible(startTile)
+    startTile = GetTile(startX, startY, board)
+    startTile.Collapse()
+    GetPossible(startTile)
 
-Propagate(startX, startY, board)
+    Propagate(startX, startY, board)
 
-prevLowest = []
+    while not AllCollapsed(board):
+        lowest = None
+        if USE_OPTIMISED_GET_LOWEST_ENTROPY:
+            lowest = random.choice(EvenMoreOptimisedGetLowestEntropy(board))
+        else:
+            lowest = random.choice([tile for tile in OptimisedGetLowestEntropy(board) if not tile.collapsed])
+        if lowest != None:
+            lowest.Collapse()
+            Propagate(lowest.x, lowest.y, board)
+            if showProgress:
+                DrawBoard(board)
+                os.system("cls")
+                time.sleep(timeDelay)
+        else:
+            break
 
-while not AllCollapsed(board):
-    lowest = random.choice([tile for tile in GetLowestEntropy(board) if not tile.collapsed])
-    prevLowest.append(lowest)
-    if lowest != None:
-        lowest.Collapse()
-        Propagate(lowest.x, lowest.y, board)
-        if showProgress:
-            DrawBoard(board)
-            os.system("cls")
-            time.sleep(timeDelay)
-    else:
-        break
-
-
+cp = cProfile.Profile()
+cp.enable()
+wfc()
+cp.disable()
 DrawBoard(board)
-
 print("seed: {}".format(seed))
 print("Board of size {}x{} generated and drawn in {:.2f} seconds".format(BOARD_SIZE[0], BOARD_SIZE[1], (time.time()-startTime)))
+cp.print_stats(sort='time')
 
